@@ -98,7 +98,11 @@ def main(
             "objective": best.objective,
             **_report_to_dict(best.report),
         },
-        "cross_validated_agreement": {"mean": cv.mean_agreement, "k": cv.k},
+        "cross_validated_agreement": {
+            "mean": cv.mean_agreement,
+            "k": cv.k,
+            "folds": cv.fold_agreements,  # spread; the mean is noisy on small sets
+        },
     }
 
 

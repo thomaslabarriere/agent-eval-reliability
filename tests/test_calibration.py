@@ -79,15 +79,40 @@ def test_recommend_threshold_kappa_objective():
     assert choice.report.kappa == pytest.approx(1.0)
 
 
-def test_cross_validated_agreement_below_in_sample_on_noise():
-    # Scores carry no signal about gold, so an in-sample threshold overfits and
-    # held-out agreement should be modest (well under a perfect 1.0).
-    gold = [True, False] * 8
-    scores = [0.5 + 0.001 * i for i in range(16)]  # unrelated to gold
-    cv = cross_validated_agreement(gold, scores, k=4, seed=0)
-    assert 0.0 <= cv.mean_agreement <= 1.0
-    assert cv.mean_agreement < 0.9
-    assert cv.k == 4
+def test_cross_validation_does_not_leak_test_into_train():
+    # Signal-free labels: a single threshold can overfit the noise in-sample, but
+    # it must not generalize. Honest CV collapses near/below chance; if a fold's
+    # training set leaked the held-out rows, the threshold would be fit on the
+    # test rows too and CV would rebound to the in-sample optimum. The gap is the
+    # test: it fails if the function trains on all the data (measured honest CV
+    # 0.375 vs leaked 0.583 on this fixture).
+    import random as _random
+
+    n = 24
+    scores = [(i + 1) / (n + 1) for i in range(n)]  # distinct, sorted
+    rng = _random.Random(42)
+    gold = [rng.random() < 0.5 for _ in range(n)]
+
+    in_sample = recommend_threshold(gold, scores, "agreement").value
+    cv = cross_validated_agreement(gold, scores, k=6, seed=0).mean_agreement
+    assert in_sample >= 0.55          # in-sample can overfit the noise
+    assert cv <= 0.45                 # honest held-out is near/below chance
+    assert cv < in_sample - 0.1       # a train/test leak would erase this gap
+
+
+def test_cross_validation_is_deterministic():
+    gold = [True, False] * 6
+    scores = [i / 12 for i in range(12)]
+    a = cross_validated_agreement(gold, scores, k=4, seed=0).mean_agreement
+    b = cross_validated_agreement(gold, scores, k=4, seed=0).mean_agreement
+    assert a == b
+
+
+def test_cross_validation_caps_k_at_n():
+    gold = [True, False, True, False]
+    scores = [0.9, 0.1, 0.8, 0.2]
+    cv = cross_validated_agreement(gold, scores, k=999)
+    assert cv.k == len(gold)  # capped to leave-one-out
 
 
 def test_cross_validated_agreement_high_on_separable_data():
