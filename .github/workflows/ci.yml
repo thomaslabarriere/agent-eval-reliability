@@ -18,3 +18,6 @@ jobs:
       # The demos must stay runnable offline (no API key, no network).
       - run: python -m windmill.delta_reliability
       - run: python -m windmill.judge_calibration
+      # The standalone files must run with no repo on the path.
+      - run: cd windmill/standalone && python delta_reliability_standalone.py
+      - run: cd windmill/standalone && python judge_calibration_standalone.py

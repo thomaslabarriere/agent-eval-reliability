@@ -82,6 +82,11 @@ which the Agent scorer already produces.
 
 - Each script is a plain `def main(...)` returning structured output, so it drops
   into a workspace as a Python script (auto-generated UI from the signature).
+- A Windmill script is a single file and cannot import this repo's `core/`, so
+  `windmill/standalone/` holds self-contained versions with the core inlined
+  (pure stdlib, zero repo imports). Paste one into a Windmill Python script and
+  it runs as-is. They are rebuilt from the tested core by
+  `scripts/build_standalone.py`, and a test fails if they drift.
 - Brick B's output is a `pass_if` value, directly usable in an Agent scorer.
 - Natural next step inside their product: surface Brick A's interval where the
   delta is rendered (`EvalsPane.svelte`), so a delta ships with its error bar.
@@ -94,9 +99,11 @@ core/          pure, tested statistics (no I/O, no LLM)
   resampling.py    paired bootstrap CI + paired permutation test
   reliability.py   run outcomes -> full report + verdict
   calibration.py   confusion, precision/recall, kappa, threshold sweep
-windmill/      the two runnables (def main), portable into a workspace
+windmill/      the two runnables (def main)
+  standalone/    core inlined into one file each, to paste into Windmill
 examples/      recorded fixtures so the demos run offline
-tests/         mutation-proof tests (revert a fix and a test goes red)
+scripts/       build_standalone.py rebuilds the standalone files from core
+tests/         tests that fail if a fix is reverted or a standalone drifts
 ```
 
 ## Scope
