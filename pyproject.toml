@@ -1,0 +1,14 @@
+[project]
+name = "agent-eval-reliability"
+version = "0.1.0"
+description = "Reliability layer for LLM-agent evals: significance of pass-rate deltas and calibration of LLM judges. Built to sit on top of Windmill agent-evals."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []  # the core is pure standard library
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

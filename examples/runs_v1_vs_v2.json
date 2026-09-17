@@ -1,0 +1,93 @@
+{
+  "version_a": "v1",
+  "version_b": "v2",
+  "runs_per_case": 5,
+  "outcomes_a": {
+    "refund_valid": [
+      true,
+      true,
+      true,
+      false,
+      false
+    ],
+    "refund_expired": [
+      true,
+      true,
+      false,
+      false,
+      false
+    ],
+    "escalate_fraud": [
+      true,
+      true,
+      true,
+      true,
+      false
+    ],
+    "partial_refund": [
+      true,
+      false,
+      false,
+      false,
+      false
+    ],
+    "reject_oos": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "duplicate_order": [
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "outcomes_b": {
+    "refund_valid": [
+      true,
+      true,
+      true,
+      true,
+      false
+    ],
+    "refund_expired": [
+      true,
+      false,
+      false,
+      false,
+      false
+    ],
+    "escalate_fraud": [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "partial_refund": [
+      true,
+      true,
+      false,
+      false,
+      false
+    ],
+    "reject_oos": [
+      true,
+      true,
+      true,
+      true,
+      false
+    ],
+    "duplicate_order": [
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  }
+}
