@@ -37,6 +37,29 @@ When several `pass_if` thresholds score equally, the higher (stricter) one is
 chosen: for a gate, a false pass is usually worse than a false fail, so we prefer
 the more conservative boundary. Callers can optimize agreement, F1, or kappa.
 
+## The recommended threshold is fit in-sample, so it is cross-validated
+`recommend_threshold` picks `pass_if` on the same labels it then scores, so its
+in-sample number is optimistic and will look better here than on the next batch.
+Rather than pretend that away, `cross_validated_agreement` refits the threshold
+on k-1 folds and measures agreement on the held-out fold, and the judge script
+reports that held-out number alongside the in-sample one. On a small label set,
+treat the recommendation as a suggestion and trust the cross-validated figure.
+
+## The overall pass-rate interval is a display approximation
+The per-version overall Wilson interval pools every run as if independent, but
+repeated runs of the same case are correlated, so that interval is narrower than
+the true uncertainty. It is kept as a display summary; the delta CI and p-value,
+which are what a version comparison actually turns on, use the paired case-level
+resampling that avoids this pooling. Stated here so it is a choice, not an
+oversight.
+
+## Within-case variance is collapsed to a per-case rate
+Both resampling tools reduce each case's N runs to one pass rate, so they capture
+between-case variability, not the noise inside a case's own rate estimate. This
+is the right question for "would this delta hold on other cases like these", but
+when N per case is small the delta CI and p-value are mildly optimistic, since
+per-case rates are themselves noisy estimates treated as fixed.
+
 ## Offline-first
 Everything runs from recorded outcomes with no network and no API key, so the
 verdicts are reproducible and reviewable. Live use feeds real outcomes into the

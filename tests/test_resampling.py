@@ -59,3 +59,22 @@ def test_seed_is_deterministic():
 def test_length_mismatch_rejected():
     with pytest.raises(ValueError):
         paired_bootstrap_ci([0.1, 0.2], [0.3], iters=10)
+
+
+def test_pvalue_floor_is_deterministic():
+    # iters=0 -> only the observed assignment is counted -> p == 1/(0+1) == 1.0.
+    # Locks the (hits+1)/(iters+1) floor: a mutation starting the count at 0 gives 0.0.
+    res = paired_permutation_test([0.0], [1.0], iters=0)
+    assert res.p_value == 1.0
+
+
+def test_bootstrap_rejects_bad_iters_and_alpha():
+    with pytest.raises(ValueError):
+        paired_bootstrap_ci([0.2], [0.5], iters=0)
+    with pytest.raises(ValueError):
+        paired_bootstrap_ci([0.2], [0.5], iters=100, alpha=1.5)
+
+
+def test_permutation_rejects_bad_alpha():
+    with pytest.raises(ValueError):
+        paired_permutation_test([0.2], [0.5], iters=100, alpha=0.0)

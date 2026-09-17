@@ -76,10 +76,18 @@ def build_report(
     """
     case_ids = _aligned_case_ids(outcomes_a, outcomes_b)
 
-    runs = len(outcomes_a[case_ids[0]])
+    run_counts: set[int] = set()
     for cid in case_ids:
-        if len(outcomes_a[cid]) == 0 or len(outcomes_b[cid]) == 0:
+        la, lb = len(outcomes_a[cid]), len(outcomes_b[cid])
+        if la == 0 or lb == 0:
             raise ValueError(f"case {cid} has no runs for one version")
+        run_counts.add(la)
+        run_counts.add(lb)
+    if len(run_counts) != 1:
+        raise ValueError(
+            f"every case must have the same number of runs per version; saw {sorted(run_counts)}"
+        )
+    runs = run_counts.pop()
 
     cases: list[CaseReport] = []
     rates_a: list[float] = []
@@ -95,6 +103,10 @@ def build_report(
         passes_a += sum(oa); trials_a += len(oa)
         passes_b += sum(ob); trials_b += len(ob)
 
+    # Caveat: this overall interval pools all runs as if independent Bernoulli
+    # trials, but repeated runs of the same case are correlated, so it is
+    # narrower than the true uncertainty. It is a display summary; the delta CI
+    # and p-value below use the paired, case-level resampling that avoids this.
     overall_a = wilson_interval(passes_a, trials_a, z)
     overall_b = wilson_interval(passes_b, trials_b, z)
     delta_ci = paired_bootstrap_ci(rates_a, rates_b, iters=iters, seed=seed, alpha=alpha)

@@ -19,9 +19,30 @@ import json
 import os
 import sys
 
+# Local-run convenience so `python -m windmill.x` finds `core`. In a Windmill
+# workspace `core` is synced as workspace scripts or pasted inline (it is pure
+# stdlib); this shim is not the workspace mechanism.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.calibration import JudgeReport, recommend_threshold, score_judge  # noqa: E402
+from core.calibration import (  # noqa: E402
+    JudgeReport,
+    cross_validated_agreement,
+    recommend_threshold,
+    score_judge,
+)
+
+
+def _as_bool(x: object) -> bool:
+    """Coerce a JSON gold label to bool, rejecting anything ambiguous.
+
+    `bool("false")` is True, so a label arriving as a string would silently flip.
+    Accept only genuine booleans or the ints 0/1.
+    """
+    if isinstance(x, bool):
+        return x
+    if isinstance(x, int) and x in (0, 1):
+        return bool(x)
+    raise ValueError(f"gold label must be a boolean (or 0/1), got {x!r}")
 
 
 def _report_to_dict(rep: JudgeReport) -> dict:
@@ -47,14 +68,27 @@ def main(
     `gold_labels`: {case_id: true/false} human labels.
     `judge_scores`: {case_id: float in [0,1]} the judge's raw score per case.
     """
+    if not isinstance(gold_labels, dict) or not isinstance(judge_scores, dict):
+        raise ValueError("gold_labels and judge_scores must both be dicts of case_id -> value")
     if gold_labels.keys() != judge_scores.keys():
         raise ValueError("gold_labels and judge_scores must cover the same case ids")
+    if not 0.0 <= current_pass_if <= 1.0:
+        raise ValueError(f"current_pass_if must be in [0, 1], got {current_pass_if}")
     case_ids = sorted(gold_labels)
-    gold = [bool(gold_labels[c]) for c in case_ids]
-    scores = [float(judge_scores[c]) for c in case_ids]
+    gold = [_as_bool(gold_labels[c]) for c in case_ids]
+    scores = []
+    for c in case_ids:
+        s = float(judge_scores[c])
+        if not 0.0 <= s <= 1.0:
+            raise ValueError(f"judge score for {c!r} must be in [0, 1], got {s}")
+        scores.append(s)
 
     current = score_judge(gold, [s >= current_pass_if for s in scores])
     best = recommend_threshold(gold, scores, objective=objective)
+    # The recommended threshold is fit on these same labels, so its in-sample
+    # score is optimistic. Report a cross-validated agreement so the number that
+    # travels is not the one the threshold was tuned on.
+    cv = cross_validated_agreement(gold, scores, objective=objective)
 
     return {
         "n": len(case_ids),
@@ -64,6 +98,7 @@ def main(
             "objective": best.objective,
             **_report_to_dict(best.report),
         },
+        "cross_validated_agreement": {"mean": cv.mean_agreement, "k": cv.k},
     }
 
 
@@ -73,15 +108,18 @@ def _render(r: dict) -> str:
     def line(tag, d):
         c = d["confusion"]
         return (
-            f"  {tag} (pass_if={d['pass_if']:.2f}): agreement {d['agreement']:.0%}, "
+            f"  {tag:<11} (pass_if={d['pass_if']:.2f}): agreement {d['agreement']:.0%}, "
             f"kappa {d['kappa']:.2f}, precision {d['precision']:.0%}, recall {d['recall']:.0%}, "
             f"fp {c['fp']} fn {c['fn']}"
         )
 
+    cv = r["cross_validated_agreement"]
     return "\n".join([
-        f"Judge calibration over {r['n']} labelled cases",
+        f"Judge calibration over {r['n']} labeled cases",
         line("current", cur),
         line("recommended", rec),
+        f"  cross-validated agreement (k={cv['k']}): {cv['mean']:.0%}"
+        " (held-out; the recommended threshold's in-sample number is optimistic)",
     ])
 
 

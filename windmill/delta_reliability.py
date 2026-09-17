@@ -19,10 +19,39 @@ import json
 import os
 import sys
 
-# Vendor the pure core so the script is portable into a Windmill workspace.
+# Make `core` importable when run locally as `python -m windmill.x`. Inside a
+# Windmill workspace `core` is not on this path; because the core is pure stdlib,
+# the intended path there is to sync it as workspace scripts (wmill / git sync)
+# or paste it inline. This shim is a local-run convenience, not the workspace
+# mechanism.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.reliability import ReliabilityReport, build_report  # noqa: E402
+
+
+def _as_bool(x: object) -> bool:
+    """Coerce a JSON run outcome to bool, rejecting anything ambiguous.
+
+    A dataset column may arrive as the string "false" or "0"; `bool("false")` is
+    True, which would silently count a failure as a pass and corrupt every number
+    downstream. Accept only genuine booleans or the ints 0/1.
+    """
+    if isinstance(x, bool):
+        return x
+    if isinstance(x, int) and x in (0, 1):
+        return bool(x)
+    raise ValueError(f"run outcome must be a boolean (or 0/1), got {x!r}")
+
+
+def _coerce_outcomes(outcomes: object, name: str) -> dict:
+    if not isinstance(outcomes, dict):
+        raise ValueError(f"{name} must be a dict of case_id -> list, got {type(outcomes).__name__}")
+    coerced = {}
+    for cid, runs in outcomes.items():
+        if not isinstance(runs, list):
+            raise ValueError(f"{name}[{cid!r}] must be a list of run outcomes, got {type(runs).__name__}")
+        coerced[cid] = [_as_bool(x) for x in runs]
+    return coerced
 
 
 def _report_to_dict(rep: ReliabilityReport) -> dict:
@@ -63,8 +92,8 @@ def main(
 ) -> dict:
     """Windmill entrypoint. `outcomes_a`/`outcomes_b`: {case_id: [true/false, ...]}."""
     rep = build_report(
-        {k: [bool(x) for x in v] for k, v in outcomes_a.items()},
-        {k: [bool(x) for x in v] for k, v in outcomes_b.items()},
+        _coerce_outcomes(outcomes_a, "outcomes_a"),
+        _coerce_outcomes(outcomes_b, "outcomes_b"),
         version_a=version_a,
         version_b=version_b,
         iters=iters,

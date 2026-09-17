@@ -38,6 +38,13 @@ def _check_pairs(a: list[float], b: list[float]) -> None:
         raise ValueError("need at least one case")
 
 
+def _check_resampling(iters: int, alpha: float) -> None:
+    if iters < 1:
+        raise ValueError(f"iters must be at least 1, got {iters}")
+    if not 0.0 < alpha < 1.0:
+        raise ValueError(f"alpha must be in (0, 1), got {alpha}")
+
+
 def paired_bootstrap_ci(
     rates_a: list[float],
     rates_b: list[float],
@@ -51,6 +58,7 @@ def paired_bootstrap_ci(
     together so the pairing is preserved.
     """
     _check_pairs(rates_a, rates_b)
+    _check_resampling(iters, alpha)
     n = len(rates_a)
     observed = _mean(rates_b) - _mean(rates_a)
     rng = random.Random(seed)
@@ -93,6 +101,10 @@ def paired_permutation_test(
     assignment is included, so the p-value is never 0.
     """
     _check_pairs(rates_a, rates_b)
+    if iters < 0:
+        raise ValueError(f"iters must be >= 0, got {iters}")
+    if not 0.0 < alpha < 1.0:
+        raise ValueError(f"alpha must be in (0, 1), got {alpha}")
     n = len(rates_a)
     diffs = [b - a for a, b in zip(rates_a, rates_b)]
     observed = abs(sum(diffs) / n)

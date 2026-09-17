@@ -3,6 +3,7 @@ import pytest
 from core.calibration import (
     cohens_kappa,
     confusion_matrix,
+    cross_validated_agreement,
     f1,
     precision,
     recall,
@@ -60,6 +61,45 @@ def test_recommend_threshold_ties_break_stricter():
     gold = [True, True, False, False]
     choice = recommend_threshold(gold, scores, objective="agreement")
     assert choice.pass_if == pytest.approx(0.8)
+
+
+def test_recommend_threshold_genuine_tie_breaks_stricter():
+    # Both candidate thresholds give identical agreement (0.5); the stricter
+    # (higher) one must win. Reversing the tie-break makes this fail.
+    choice = recommend_threshold([True, False], [0.5, 0.5], objective="agreement")
+    assert choice.pass_if > 0.5
+
+
+def test_recommend_threshold_kappa_objective():
+    # Exercises the kappa branch of the objective dispatch.
+    scores = [0.9, 0.8, 0.2, 0.1]
+    gold = [True, True, False, False]
+    choice = recommend_threshold(gold, scores, objective="kappa")
+    assert choice.objective == "kappa"
+    assert choice.report.kappa == pytest.approx(1.0)
+
+
+def test_cross_validated_agreement_below_in_sample_on_noise():
+    # Scores carry no signal about gold, so an in-sample threshold overfits and
+    # held-out agreement should be modest (well under a perfect 1.0).
+    gold = [True, False] * 8
+    scores = [0.5 + 0.001 * i for i in range(16)]  # unrelated to gold
+    cv = cross_validated_agreement(gold, scores, k=4, seed=0)
+    assert 0.0 <= cv.mean_agreement <= 1.0
+    assert cv.mean_agreement < 0.9
+    assert cv.k == 4
+
+
+def test_cross_validated_agreement_high_on_separable_data():
+    gold = [True] * 8 + [False] * 8
+    scores = [0.9] * 8 + [0.1] * 8  # perfectly separable
+    cv = cross_validated_agreement(gold, scores, k=4, seed=1)
+    assert cv.mean_agreement == pytest.approx(1.0)
+
+
+def test_cross_validation_needs_enough_cases():
+    with pytest.raises(ValueError):
+        cross_validated_agreement([True], [0.5], k=5)
 
 
 def test_length_mismatch_rejected():

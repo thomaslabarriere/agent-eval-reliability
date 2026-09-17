@@ -12,6 +12,7 @@ reports agreement, precision/recall, the confusion matrix, and Cohen's kappa
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 
 
@@ -31,7 +32,7 @@ def confusion_matrix(gold: list[bool], judge: list[bool]) -> Confusion:
     if len(gold) != len(judge):
         raise ValueError(f"gold and judge must align, got {len(gold)} and {len(judge)}")
     if not gold:
-        raise ValueError("need at least one labelled case")
+        raise ValueError("need at least one labeled case")
     tp = fp = fn = tn = 0
     for g, j in zip(gold, judge):
         if g and j:
@@ -132,18 +133,75 @@ def recommend_threshold(
     if len(gold) != len(scores):
         raise ValueError(f"gold and scores must align, got {len(gold)} and {len(scores)}")
     if not gold:
-        raise ValueError("need at least one labelled case")
-    objectives = {"agreement": agreement, "f1": f1, "kappa": None}
+        raise ValueError("need at least one labeled case")
+    objectives = {
+        "agreement": lambda r: r.agreement,
+        "f1": lambda r: r.f1,
+        "kappa": lambda r: r.kappa,
+    }
     if objective not in objectives:
         raise ValueError(f"unknown objective {objective!r}, expected one of {sorted(objectives)}")
+    score_of = objectives[objective]
 
     candidates = sorted(set(scores) | {max(scores) + 1e-9})
     best: ThresholdChoice | None = None
     for thr in candidates:
         judge = [s >= thr for s in scores]
         rep = score_judge(gold, judge)
-        value = rep.kappa if objective == "kappa" else objectives[objective](rep.confusion)
+        value = score_of(rep)
         if best is None or value > best.value or (value == best.value and thr > best.pass_if):
             best = ThresholdChoice(pass_if=thr, objective=objective, value=value, report=rep)
     assert best is not None
     return best
+
+
+@dataclass(frozen=True)
+class CrossValResult:
+    mean_agreement: float  # agreement on held-out folds, averaged
+    k: int
+    fold_agreements: list[float]
+
+
+def cross_validated_agreement(
+    gold: list[bool],
+    scores: list[float],
+    k: int = 5,
+    objective: str = "agreement",
+    seed: int = 0,
+) -> CrossValResult:
+    """Honest estimate of how a recommended threshold generalizes.
+
+    `recommend_threshold` fits `pass_if` on the labels it is then scored against,
+    so its in-sample number is optimistic. This picks the threshold on k-1 folds
+    and measures agreement on the held-out fold, averaged over folds, so the
+    reported number is not the one the threshold was tuned on. Deterministic given
+    `seed`. `k` is capped at the number of cases.
+    """
+    n = len(gold)
+    if n != len(scores):
+        raise ValueError(f"gold and scores must align, got {n} and {len(scores)}")
+    if n < 2:
+        raise ValueError("need at least two cases to cross-validate")
+    if k < 2:
+        raise ValueError(f"k must be at least 2, got {k}")
+    k = min(k, n)
+
+    idx = list(range(n))
+    random.Random(seed).shuffle(idx)
+    folds = [idx[i::k] for i in range(k)]
+
+    fold_agreements: list[float] = []
+    for fold in folds:
+        test_ids = set(fold)
+        train_g = [gold[i] for i in range(n) if i not in test_ids]
+        train_s = [scores[i] for i in range(n) if i not in test_ids]
+        thr = recommend_threshold(train_g, train_s, objective=objective).pass_if
+        test_judge = [scores[i] >= thr for i in fold]
+        test_gold = [gold[i] for i in fold]
+        fold_agreements.append(agreement(confusion_matrix(test_gold, test_judge)))
+
+    return CrossValResult(
+        mean_agreement=sum(fold_agreements) / len(fold_agreements),
+        k=k,
+        fold_agreements=fold_agreements,
+    )
